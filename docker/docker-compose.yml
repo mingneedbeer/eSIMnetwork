@@ -1,0 +1,179 @@
+version: "3.9"
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  op-geth:
+    build:
+      context: ./op-geth
+    container_name: esim-op-geth
+    restart: unless-stopped
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+      - "30303:30303"
+      - "30303:30303/udp"
+    volumes:
+      - ../data/op-geth:/data
+      - ../config:/config
+    environment:
+      - L1_RPC_URL=${L1_RPC_URL}
+      - L2_CHAIN_ID=${L2_CHAIN_ID}
+    command: >
+      --datadir=/data
+      --http
+      --http.addr=0.0.0.0
+      --http.port=8545
+      --http.corsdomain=*
+      --http.vhosts=*
+      --http.api=eth,web3,debug,admin,net,txpool
+      --ws
+      --ws.addr=0.0.0.0
+      --ws.port=8546
+      --ws.api=eth,web3,debug,admin,net,txpool
+      --ws.origins=*
+      --syncmode=full
+      --gcmode=archive
+      --networkid=${L2_CHAIN_ID}
+      --rollup.sequencerhttp=http://op-geth:8545
+      --authrpc.addr=0.0.0.0
+      --authrpc.port=8551
+      --authrpc.jwtsecret=/config/jwt.txt
+      --rollup.disabletxpoolgossip=true
+    <<: *logging
+    networks:
+      - esim-net
+
+  op-node:
+    build:
+      context: ./op-node
+    container_name: esim-op-node
+    restart: unless-stopped
+    ports:
+      - "7300:7300"
+      - "9003:9003"
+    volumes:
+      - ../config:/config
+    environment:
+      - L1_RPC_URL=${L1_RPC_URL}
+      - L2_CHAIN_ID=${L2_CHAIN_ID}
+    command: >
+      --l1=${L1_RPC_URL}
+      --l2=http://op-geth:8551
+      --l2.jwt-secret=/config/jwt.txt
+      --network=esim
+      --rollup.config=/config/rollup.json
+      --rpc.addr=0.0.0.0
+      --rpc.port=7300
+      --p2p.listen.ip=0.0.0.0
+      --p2p.listen.tcp=9003
+      --p2p.listen.udp=9003
+      --p2p.priv.path=/config/p2p-node-key.txt
+      --p2p.sequencer.key=${SEQUENCER_PRIVATE_KEY}
+      --sequencer.enabled
+      --sequencer.l1-confs=5
+      --verifier.l1-confs=4
+    depends_on:
+      op-geth:
+        condition: service_started
+    <<: *logging
+    networks:
+      - esim-net
+
+  op-batcher:
+    build:
+      context: ./op-batcher
+    container_name: esim-op-batcher
+    restart: unless-stopped
+    volumes:
+      - ../config:/config
+    environment:
+      - L1_RPC_URL=${L1_RPC_URL}
+      - L2_CHAIN_ID=${L2_CHAIN_ID}
+    command: >
+      --l1=${L1_RPC_URL}
+      --l2=http://op-geth:8551
+      --l2.jwt-secret=/config/jwt.txt
+      --rollup.config=/config/rollup.json
+      --private-key=${BATCHER_PRIVATE_KEY}
+      --l1-eth-rpc=${L1_RPC_URL}
+      --rpc.addr=0.0.0.0
+      --rpc.port=8545
+      --num-confirmations=1
+      --safe-abort-nonce-too-low-count=3
+      --resubmission-timeout=30s
+      --poll-interval=1s
+      --transaction-type=0
+      --batch-type=1
+      --max-l1-tx-size=120000
+    depends_on:
+      op-node:
+        condition: service_started
+    <<: *logging
+    networks:
+      - esim-net
+
+  op-proposer:
+    build:
+      context: ./op-proposer
+    container_name: esim-op-proposer
+    restart: unless-stopped
+    volumes:
+      - ../config:/config
+    environment:
+      - L1_RPC_URL=${L1_RPC_URL}
+      - L2_CHAIN_ID=${L2_CHAIN_ID}
+    command: >
+      --l1=${L1_RPC_URL}
+      --l2=http://op-geth:8551
+      --l2.jwt-secret=/config/jwt.txt
+      --rollup.config=/config/rollup.json
+      --private-key=${PROPOSER_PRIVATE_KEY}
+      --l1-eth-rpc=${L1_RPC_URL}
+      --rpc.addr=0.0.0.0
+      --rpc.port=8545
+      --num-confirmations=1
+      --poll-interval=12s
+      --l2-output-oracle-address=${L2_OUTPUT_ORACLE_ADDRESS}
+      --allow-non-finalized=true
+    depends_on:
+      op-node:
+        condition: service_started
+    <<: *logging
+    networks:
+      - esim-net
+
+  op-challenger:
+    build:
+      context: ./op-challenger
+    container_name: esim-op-challenger
+    restart: unless-stopped
+    volumes:
+      - ../config:/config
+    environment:
+      - L1_RPC_URL=${L1_RPC_URL}
+      - L2_CHAIN_ID=${L2_CHAIN_ID}
+    command: >
+      --l1=${L1_RPC_URL}
+      --l2=http://op-geth:8551
+      --l2.jwt-secret=/config/jwt.txt
+      --rollup.config=/config/rollup.json
+      --private-key=${CHALLENGER_PRIVATE_KEY}
+      --l1-eth-rpc=${L1_RPC_URL}
+      --num-confirmations=1
+      --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
+    depends_on:
+      op-node:
+        condition: service_started
+    <<: *logging
+    networks:
+      - esim-net
+
+networks:
+  esim-net:
+    driver: bridge

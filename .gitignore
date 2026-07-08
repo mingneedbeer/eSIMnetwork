@@ -1,0 +1,13 @@
+.env
+node_modules/
+cache/
+out/
+artifacts/
+broadcast/
+data/
+*.log
+datadir/
+jwt.txt
+opnode_discovery_db/
+opnode_peerstore_db/
+opnode_p2p_priv.txt
