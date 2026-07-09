@@ -31,7 +31,7 @@ services:
       --http.port=8545
       --http.corsdomain=*
       --http.vhosts=*
-      --http.api=eth,web3,debug,admin,net,txpool
+      --http.api=eth,web3,debug,admin,net,txpool,miner
       --ws
       --ws.addr=0.0.0.0
       --ws.port=8546
@@ -44,6 +44,7 @@ services:
       --authrpc.addr=0.0.0.0
       --authrpc.port=8551
       --authrpc.jwtsecret=/config/jwt.txt
+      --authrpc.vhosts=*
       --rollup.disabletxpoolgossip=true
     <<: *logging
     networks:
@@ -61,13 +62,15 @@ services:
       - ../config:/config
     environment:
       - L1_RPC_URL=${L1_RPC_URL}
+      - L1_BEACON_RPC_URL=${L1_BEACON_RPC_URL}
       - L2_CHAIN_ID=${L2_CHAIN_ID}
     command: >
       --l1=${L1_RPC_URL}
       --l2=http://op-geth:8551
       --l2.jwt-secret=/config/jwt.txt
-      --network=esim
-      --rollup.config=/config/rollup.json
+      --rollup.config=/config/testnet/rollup.json
+      --l1.beacon=${L1_BEACON_RPC_URL}
+      --l1.beacon.ignore=true
       --rpc.addr=0.0.0.0
       --rpc.port=7300
       --p2p.listen.ip=0.0.0.0
@@ -96,21 +99,14 @@ services:
       - L1_RPC_URL=${L1_RPC_URL}
       - L2_CHAIN_ID=${L2_CHAIN_ID}
     command: >
-      --l1=${L1_RPC_URL}
-      --l2=http://op-geth:8551
-      --l2.jwt-secret=/config/jwt.txt
-      --rollup.config=/config/rollup.json
-      --private-key=${BATCHER_PRIVATE_KEY}
       --l1-eth-rpc=${L1_RPC_URL}
+      --l2-eth-rpc=http://op-geth:8545
+      --rollup-rpc=http://op-node:7300
+      --private-key=${BATCHER_PRIVATE_KEY}
       --rpc.addr=0.0.0.0
       --rpc.port=8545
-      --num-confirmations=1
-      --safe-abort-nonce-too-low-count=3
-      --resubmission-timeout=30s
       --poll-interval=1s
-      --transaction-type=0
       --batch-type=1
-      --max-l1-tx-size=120000
     depends_on:
       op-node:
         condition: service_started
@@ -129,17 +125,14 @@ services:
       - L1_RPC_URL=${L1_RPC_URL}
       - L2_CHAIN_ID=${L2_CHAIN_ID}
     command: >
-      --l1=${L1_RPC_URL}
-      --l2=http://op-geth:8551
-      --l2.jwt-secret=/config/jwt.txt
-      --rollup.config=/config/rollup.json
-      --private-key=${PROPOSER_PRIVATE_KEY}
       --l1-eth-rpc=${L1_RPC_URL}
+      --rollup-rpc=http://op-node:7300
+      --private-key=${PROPOSER_PRIVATE_KEY}
       --rpc.addr=0.0.0.0
       --rpc.port=8545
-      --num-confirmations=1
       --poll-interval=12s
-      --l2-output-oracle-address=${L2_OUTPUT_ORACLE_ADDRESS}
+      --proposal-interval=30m
+      --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
       --allow-non-finalized=true
     depends_on:
       op-node:
@@ -148,31 +141,31 @@ services:
     networks:
       - esim-net
 
-  op-challenger:
-    build:
-      context: ./op-challenger
-    container_name: esim-op-challenger
-    restart: unless-stopped
-    volumes:
-      - ../config:/config
-    environment:
-      - L1_RPC_URL=${L1_RPC_URL}
-      - L2_CHAIN_ID=${L2_CHAIN_ID}
-    command: >
-      --l1=${L1_RPC_URL}
-      --l2=http://op-geth:8551
-      --l2.jwt-secret=/config/jwt.txt
-      --rollup.config=/config/rollup.json
-      --private-key=${CHALLENGER_PRIVATE_KEY}
-      --l1-eth-rpc=${L1_RPC_URL}
-      --num-confirmations=1
-      --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
-    depends_on:
-      op-node:
-        condition: service_started
-    <<: *logging
-    networks:
-      - esim-net
+#  op-challenger:
+#    build:
+#      context: ./op-challenger
+#    container_name: esim-op-challenger
+#    restart: unless-stopped
+#    volumes:
+#      - ../config:/config
+#    environment:
+#      - L1_RPC_URL=${L1_RPC_URL}
+#      - L2_CHAIN_ID=${L2_CHAIN_ID}
+#    command: >
+#      --l1=${L1_RPC_URL}
+#      --l2=http://op-geth:8551
+#      --l2.jwt-secret=/config/jwt.txt
+#      --rollup.config=/config/rollup.json
+#      --private-key=${CHALLENGER_PRIVATE_KEY}
+#      --l1-eth-rpc=${L1_RPC_URL}
+#      --num-confirmations=1
+#      --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
+#    depends_on:
+#      op-node:
+#        condition: service_started
+#    <<: *logging
+#    networks:
+#      - esim-net
 
 networks:
   esim-net:
